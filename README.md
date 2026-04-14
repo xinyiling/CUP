@@ -20,23 +20,26 @@ We evaluate on four conversational benchmarks — [Inspired](https://github.com/
 
 Run CUP on each dataset:
 ```bash
-python run.py --dataset inspired
-python run.py --dataset lavic --category all_beauty
-python run.py --dataset lavic --category amazon_fashion
-python run.py --dataset lavic --category amazon_home
+python run.py --dataset ${dataset} --system-model ${model}
+```
+
+<code>${dataset}</code> specifies the dataset to be evaluated on, selected from `inspired` / `beauty` / `fashion` / `home`
+
+<code>${model}</code> specifies the backbone system model from huggingface.
 ```
 
 ## Key Parameters
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--max-turns` | 5 | Maximum conversation turns (T) |
-| `--system-model` | Llama-3.1-8B | LLM for action proposal and verbalization |
-| `--sim-model` | Llama-3.2-3B | LLM for user simulation |
-| `--entropy-threshold` | 0.5 | Normalized entropy ratio for commitment |
-| `--belief-threshold` | 0.8 | Max belief probability for commitment |
-| `--bayesian-alpha` | 1.0 | Exponent for Bayesian belief update |
-| `--num-simulations` | 50 | MCTS search budget |
+| Parameter | Description |
+|-----------|-------------|
+| `--dataset` | `inspired` / `beauty` / `fashion` / `home` |
+| `--T` | Maximum conversation turns (T) |
+| `--system-model` | Backbone language model for action proposal, verbalization, and refined commitment |
+| `--sim-model` | Separate LLM that simulates user response |
+| `--model-device` | Device for all models |
+| `--epsilon` | Normalized entropy threshold for commitment trigger |
+| `--theta` | Max belief probability threshold for commitment |
+| `--K` | Search budget: number of MCTS simulations per turn |
 
 ## Requirements
 
