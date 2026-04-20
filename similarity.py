@@ -1,5 +1,8 @@
 """
-SBERT similarity manager for belief initialization (Eq.1) and candidate retrieval.
+SBERT similarity manager for belief initialization and candidate retrieval.
+
+sim(·) is cosine similarity between SBERT embeddings of candidate text
+and conversation/query text.
 """
 
 import os
@@ -16,10 +19,11 @@ class SimilarityManager:
         self.device = device if torch.cuda.is_available() else "cpu"
         print(f"Loading sentence-BERT: {model_name}...")
         self.model = SentenceTransformer(model_name, device=self.device)
-        self.item_embeddings = {}
+        self.item_embeddings = {}  # item_id -> embedding vector
         os.makedirs(CACHE_DIR, exist_ok=True)
 
     def load_embeddings(self, cache_key):
+        """Load pre-computed item embeddings from disk cache."""
         path = os.path.join(CACHE_DIR, f"{cache_key}.pkl")
         if os.path.exists(path):
             print(f"Loading cached embeddings: {cache_key}")
@@ -29,6 +33,7 @@ class SimilarityManager:
         return False
 
     def compute_embeddings(self, item_texts, cache_key=None, batch_size=32):
+        """Compute SBERT embeddings for all items and optionally cache to disk."""
         print(f"Computing embeddings for {len(item_texts)} items")
         ids = list(item_texts.keys())
         texts = [item_texts[i] for i in ids]
@@ -40,16 +45,21 @@ class SimilarityManager:
                 pickle.dump(self.item_embeddings, f)
 
     def compute_similarity(self, query_text, candidate_ids, temperature=1.0):
+        """Compute softmaxed cosine_similarity between query and candidates."""
         query_emb = self.model.encode(query_text, convert_to_numpy=True)
         cand_embs = np.array([self.item_embeddings[c] for c in candidate_ids])
-        q_norm = query_emb / np.linalg.norm(query_emb)  # the query's embedding vector
-        c_norms = cand_embs / np.linalg.norm(cand_embs, axis=1, keepdims=True)  # metrix 
+        # normalize for cosine similarity
+        q_norm = query_emb / np.linalg.norm(query_emb)
+        c_norms = cand_embs / np.linalg.norm(cand_embs, axis=1, keepdims=True)
+        # cosine similarity = dot product of normalized vectors
         sims = np.dot(c_norms, q_norm)
+        # temperature-scaled softmax
         scaled = sims / temperature
-        exp_s = np.exp(scaled - np.max(scaled))
+        exp_s = np.exp(scaled - np.max(scaled))  # subtract max for numerical stability
         return exp_s / np.sum(exp_s)
 
     def retrieve_top_k(self, query_text, item_ids=None, top_k=300):
+        """Retrieve top-k most similar items to query text."""
         if item_ids is None:
             item_ids = list(self.item_embeddings.keys())
         query_emb = self.model.encode(query_text, convert_to_numpy=True)

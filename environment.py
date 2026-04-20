@@ -89,9 +89,7 @@ class State:
             belief=self.belief.copy(), turn_count=self.turn_count,
             terminated=self.terminated, success=self.success)
 
-
 NO_PREFERENCE = "No preference"
-
 
 def get_ask_actions(data_loader, candidates, asked_attributes, max_options=4):
     """Build structural AskActions from candidate attribute distributions."""
@@ -195,14 +193,14 @@ class ConversationEnvironment:
         Returns (next_state, reward, done)."""
         if isinstance(action, AskAction):
             return self._execute_ask(action, utterance)
-        elif isinstance(action, RecommendAction):
+        else:
             return self._execute_recommend(action, utterance)
 
     def _execute_ask(self, action, utterance=None):
         """Execute ask action: user responds, filter candidates, update belief."""
         entropy_before = self.state.belief.entropy()
 
-        # use verbalized utterance if available, else generate from template
+        # use verbalized utterance if available
         if utterance:
             agent_text = utterance
         else:
@@ -216,18 +214,18 @@ class ConversationEnvironment:
         self.state.belief.add_constraint(action.attribute_name, response.selected_option)
         self._filter_candidates(action.attribute_name, response.selected_option, action.options)
 
-        # Eq.10: Bayesian belief update using sim(c_i, h_{t+1})
-        if self.similarity_manager:
-            turn_text = f"{agent_text} {response.selected_option}"
-            if response.natural_language:
-                turn_text += f" {response.natural_language}"
-            self.conversation_text += f" {turn_text}"
+        # update conversation history
+        turn_text = f"{agent_text} {response.selected_option}"
+        if response.natural_language:
+            turn_text += f" {response.natural_language}"
+        self.conversation_text += f" {turn_text}"
 
-            if self.state.candidates:
-                sim_array = self.similarity_manager.compute_similarity(
-                    self.conversation_text, self.state.candidates, temperature=self.softmax_temperature)
-                sim_dict = {cid: float(s) for cid, s in zip(self.state.candidates, sim_array)}
-                self.state.belief.update_bayesian(sim_dict, self.state.candidates, self.delta)
+        # Eq.10: update belief state
+        if self.similarity_manager and self.state.candidates:
+            sim_array = self.similarity_manager.compute_similarity(
+                self.conversation_text, self.state.candidates, temperature=self.softmax_temperature)
+            sim_dict = {cid: float(s) for cid, s in zip(self.state.candidates, sim_array)}
+            self.state.belief.update_bayesian(sim_dict, self.state.candidates, self.delta)
         else:
             self.state.belief.filter_candidates(self.state.candidates)
 
@@ -250,28 +248,39 @@ class ConversationEnvironment:
         agent_action = AgentAction(action_type="recommend", recommended_items=action.recommended_items)
         response = self.user_simulator.respond(agent_action)
 
-        turn = Turn(self.state.turn_count, "recommend", action.to_dict(), agent_text,
-                    "accept" if response.is_accept else "reject",
-                    response.natural_language, entropy_before, entropy_before, 0.0)
-        self.state.history.append(turn)
-        self.state.turn_count += 1
-
         if response.is_accept:
             self.state.success = True
             self.state.terminated = True
         else:
             # failed commit: remove recommended item from candidates
-            self.state.candidates = [c for c in self.state.candidates
-                                     if c not in set(action.recommended_items)]
-            self.state.belief.filter_candidates(self.state.candidates)
+            self.state.candidates = [c for c in self.state.candidates if c not in set(action.recommended_items)]
+
+            # update conversation history
+            turn_text = f"{agent_text} {response.natural_language}"
+            self.conversation_text += f" {turn_text}"
+
+            # Eq.10: update belief state
+            if self.similarity_manager and self.state.candidates:
+                sim_array = self.similarity_manager.compute_similarity(
+                    self.conversation_text, self.state.candidates, temperature=self.softmax_temperature)
+                sim_dict = {cid: float(s) for cid, s in zip(self.state.candidates, sim_array)}
+                self.state.belief.update_bayesian(sim_dict, self.state.candidates, self.delta)
+            else:
+                self.state.belief.filter_candidates(self.state.candidates)
+
+        entropy_after = self.state.belief.entropy()
+        turn = Turn(self.state.turn_count, "recommend", action.to_dict(), agent_text,
+                    "accept" if response.is_accept else "reject",
+                    response.natural_language, entropy_before, entropy_after, 0.0)
+        self.state.history.append(turn)
+        self.state.turn_count += 1
 
         done = self._check_termination()
         reward = self._compute_reward(done, "recommend", success=response.is_accept)
         return self.state.copy(), reward, done
 
     def _filter_candidates(self, attr_name, attr_value, options):
-        """Filter C_t based on user's attribute selection.
-        Three cases: "No preference" (None), "Others" (catch-all), specific value."""
+        """Filter C_t based on user's attribute selection."""
         if attr_value == NO_PREFERENCE:
             self.state.candidates = [
                 cid for cid in self.state.candidates
@@ -296,6 +305,7 @@ class ConversationEnvironment:
                 self.state.candidates, attr_name, attr_value)
 
     def _check_termination(self):
+        """Check is the conversation should terminate."""
         if self.state.terminated:
             return True
         if self.state.turn_count >= self.T:

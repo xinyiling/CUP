@@ -76,41 +76,11 @@ class EpisodeRecord:
 
 
 def compute_metrics(records, max_turns=5):
-    if not records:
-        return {"num_episodes": 0, "success_rate": 0.0, "avg_turns": 0.0, "avg_reward": 0.0}
-
     n = len(records)
     successes = [r for r in records if r.success]
     sr = len(successes) / n
     avg_turns = sum(r.num_turns for r in records) / n
-    avg_reward = sum(r.total_reward for r in records) / n
-    avg_ig = sum(r.total_info_gain for r in records) / n
-
-    success_at_k = {
-        f"success@{max_turns}": sum(1 for r in records if r.success and r.num_turns <= max_turns) / n
-    }
-
-    turn_data = defaultdict(lambda: {"count": 0, "ask": 0, "rec": 0, "ig": 0.0})
-    for record in records:
-        for turn in record.turns:
-            t = turn_data[turn.turn_id]
-            t["count"] += 1
-            if turn.action_type == "ask":
-                t["ask"] += 1
-                t["ig"] += turn.info_gain
-            else:
-                t["rec"] += 1
-
-    turn_stats = {}
-    for tid, s in sorted(turn_data.items()):
-        turn_stats[f"turn_{tid+1}"] = {
-            "count": s["count"], "ask_count": s["ask"], "recommend_count": s["rec"],
-            "avg_info_gain": s["ig"] / s["ask"] if s["ask"] > 0 else 0
-        }
 
     return {
-        "success_rate": sr, "avg_turns": avg_turns,
-        "num_conversations": n, "num_successes": len(successes),
-        **success_at_k,
-        "turn_stats": turn_stats,
+        "success_rate": sr, "avg_turns": avg_turns
     }

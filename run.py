@@ -71,7 +71,7 @@ def create_simulator(target_item, user_llm=None, dataset="inspired", askable=Non
         )
 
 
-def refine_commit(state, env, llm, dataset):
+def refine_commit(state, env, llm, dataset, action):
     """refined commitment refinement (Section 3.5).
 
     When commitment is triggered but belief is not highly confident
@@ -100,26 +100,40 @@ def refine_commit(state, env, llm, dataset):
         prompt = refined_commit_prompt(dataset, cands_with_names, h_t)
         messages = [{"role": "system", "content": REFINED_COMMIT_SYSTEM},
                     {"role": "user", "content": prompt}]
-        response = llm.generate(messages, max_new_tokens=256)
+        response = llm.generate(messages, max_new_tokens=512)
 
         if not response:
             raise ValueError("LLM returned empty response for refined commit.")
 
-        # parse "COMMIT: <name>" from LLM response
+        cand_names = [n for n, _ in cands_with_names]
+
+        # Parse strategy 1: look for explicit COMMIT marker
         for marker in ["COMMIT:", "commit:", "Commit:"]:
             if marker in response:
                 name = response.split(marker, 1)[1].strip().split('\n')[0].strip()
-                cand_names = [n for n, _ in cands_with_names]
+                # strip common prefixes/quotes
+                name = name.strip('"\'*`').strip()
                 for cn in cand_names:
                     if name.lower() == cn.lower() or name.lower() in cn.lower() or cn.lower() in name.lower():
                         return RecommendAction(recommended_items=[cn])
-                raise ValueError(f"Refined commitment parsed '{name}' but no candidate matched.")
 
-        raise ValueError("Could not parse COMMIT marker from LLM response.")
+        # Parse strategy 2: find the last candidate name mentioned in the response
+        last_pos = -1
+        last_match = None
+        for cn in cand_names:
+            # find last occurrence of candidate name
+            pos = response.lower().rfind(cn.lower())
+            if pos > last_pos:
+                last_pos = pos
+                last_match = cn
+        if last_match is not None:
+            return RecommendAction(recommended_items=[last_match])
+
+        raise ValueError("Could not parse any candidate from LLM response.")
 
     except Exception as e:
-        print(f"Warning: refined commit failed ({e}), falling back to belief top-1.")
-        return None
+        print(f"Warning: refined commit failed ({e}).")
+        return action
 
 
 def verbalize_action(action, state, llm, dataset):
@@ -159,10 +173,9 @@ def execute_turn(action, state, env, record, llm=None, dataset=None):
     Input:  action (AskAction or RecommendAction), current state, env, record
     Output: (next_state, reward, done)
     """
-    entropy_before = state.current_entropy
+    # record turn information
     turn = TurnRecord(turn_id=state.turn_count,
                       action_type="recommend" if isinstance(action, RecommendAction) else "ask")
-
     if isinstance(action, RecommendAction):
         turn.recommended_items = action.recommended_items
     elif isinstance(action, AskAction):
@@ -183,7 +196,7 @@ def execute_turn(action, state, env, record, llm=None, dataset=None):
     # record post-action information
     turn.num_candidates_after = next_state.num_candidates
     turn.entropy_after = next_state.current_entropy
-    turn.info_gain = max(0, entropy_before - turn.entropy_after)
+    turn.info_gain = max(0, state.current_entropy - turn.entropy_after)
     turn.belief_after = dict(next_state.belief.probs)
     turn.reward = reward
 
@@ -267,14 +280,10 @@ def evaluate(loader, dataset, indices, sbert, user_llm, K=50, T=5, c=1.4,
 
                 if forced_commit:
                     # commitment execution
-                    if not isinstance(available[0], RecommendAction):
-                        raise RuntimeError(f"Expected RecommendAction when forced to commit, got {type(available[0])}")
-
-                    # direct commit when confident enough
-                    # refined commit otherwise
+                    # direct commit when confident enough, refined commit otherwise
                     top_prob = max(state.belief.probs.values())
                     if top_prob < theta:
-                        action = refine_commit(state, env, llm, dataset)
+                        action = refine_commit(state, env, llm, dataset, available[0])
                     else:
                         action = available[0]
                 else:
@@ -286,7 +295,7 @@ def evaluate(loader, dataset, indices, sbert, user_llm, K=50, T=5, c=1.4,
 
                     # if MCTS chose to commit, apply refined commitment
                     if isinstance(mcts_action, RecommendAction) and max(state.belief.probs.values()) < theta:
-                        action = refine_commit(state, env, llm, dataset)
+                        action = refine_commit(state, env, llm, dataset, mcts_action)
                     else:
                         action = mcts_action
 
@@ -298,7 +307,6 @@ def evaluate(loader, dataset, indices, sbert, user_llm, K=50, T=5, c=1.4,
 
         except Exception as e:
             print(f"Error in conversation {idx}: {e}.")
-            # continue
 
     return records
 
@@ -362,14 +370,15 @@ def main():
     # run evaluation
     records = evaluate(
         loader, args.dataset, indices, sbert, user_llm,
-        args.K, args.T, args.c,
-        args.softmax_temperature, args.delta, args.epsilon, args.theta,
+        args.K, args.T, args.c, args.softmax_temperature, 
+        args.delta, args.epsilon, args.theta,
         action_proposer=proposer, llm=llm)
 
     # save record
     out_dir = os.path.join(args.output_dir, args.dataset)
     os.makedirs(out_dir, exist_ok=True)
     prefix = args.system_model.split('/')[-1][:12]
+
     metrics = compute_metrics(records, args.T)
 
     save_path = os.path.join(out_dir, f"{prefix}_T{args.T}.json")
