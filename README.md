@@ -26,7 +26,7 @@ python run.py --dataset ${dataset} --system-model ${model}
 <code>${dataset}</code> specifies the dataset to be evaluated on, selected from `inspired` / `beauty` / `fashion` / `home`
 
 <code>${model}</code> specifies the backbone system model from huggingface.
-```
+
 
 ## Key Parameters
 
@@ -44,3 +44,14 @@ python run.py --dataset ${dataset} --system-model ${model}
 ## Requirements
 
 Python 3.10+, PyTorch, Transformers, sentence-transformers, tqdm, numpy.
+
+
+## Citation
+```bibtex
+@article{ling2026uncertainty,
+  title={Uncertainty as a Planning Signal: Multi-Turn Decision Making for Goal-Oriented Conversation},
+  author={Ling, Xinyi and Liu, Ye and Averly, Reza and Ning, Xia},
+  journal={arXiv preprint arXiv:2604.03924},
+  year={2026}
+}
+```
