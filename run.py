@@ -48,10 +48,10 @@ DATASET_TO_CATEGORY = {
 def load_dataset(dataset):
     """Load dataset: items, attributes, and question templates."""
     if dataset == "inspired":
-        loader = InspiredDataLoader('/fs/ess/PCON0041/xinyi/current/proj/Inspired')
+        loader = InspiredDataLoader('./Inspired')
     elif dataset in DATASET_TO_CATEGORY:
         category = DATASET_TO_CATEGORY[dataset]
-        loader = LavicDataLoader('/fs/ess/PCON0041/xinyi/current/proj/lavic', category, "test")
+        loader = LavicDataLoader('./lavic', category, "test")
     else:
         raise ValueError(f"Unknown dataset: {dataset}. Must be one of: inspired, beauty, fashion, home.")
     loader.load_data()

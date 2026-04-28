@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 from prompts import get_domain, user_system_prompt, user_question_prompt, user_accept_prompt, user_reject_prompt
 
-MODEL_CACHE_DIR = "/fs/scratch/PCON0041/xinyi/model"
+MODEL_CACHE_DIR = "."
 NO_PREFERENCE = "No preference"
 OTHERS = "Others"
 

@@ -6,7 +6,7 @@ from collections import Counter
 from .base import BaseDataLoader, Item, Attribute
 from .utils import get_lavic_conversation_text, batch_get_item_texts
 
-CANDIDATE_CACHE_DIR = "/fs/ess/PCON0041/xinyi/current/proj/cup/candidates"
+CANDIDATE_CACHE_DIR = "./candidates"
 
 CATEGORY_CONFIG = {
     "all_beauty": {

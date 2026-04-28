@@ -11,7 +11,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 import torch
 
-CACHE_DIR = "/fs/ess/PCON0041/xinyi/current/proj/cup/embeddings"
+CACHE_DIR = "./embeddings"
 
 
 class SimilarityManager:

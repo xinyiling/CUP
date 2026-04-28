@@ -27,7 +27,7 @@ LANGUAGE_BUCKETS = {
     "Others": lambda l: True,
 }
 
-CANDIDATE_CACHE_DIR = "/fs/ess/PCON0041/xinyi/current/proj/cup/candidates"
+CANDIDATE_CACHE_DIR = "./candidates"
 
 
 class InspiredDataLoader(BaseDataLoader):
